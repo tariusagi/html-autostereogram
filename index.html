@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autostereogram Maker</title>
+<style>
+:root{
+  --bg:#0f1218;--panel:#181c25;--panel2:#1f2430;--border:#2c3342;--text:#e8ebf2;--muted:#98a1b5;
+  --accent:#6ea8ff;--accent-ink:#06142b;--danger:#ff7b7b;--ok:#6fd49a;--radius:12px;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f3f5f9;--panel:#ffffff;--panel2:#eef1f6;--border:#d6dbe6;--text:#1a2030;--muted:#5d667a;
+    --accent:#2f6df0;--accent-ink:#ffffff;--danger:#c93a3a;--ok:#1d8a52;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1400px;margin:0 auto;padding:16px}
+h1{font-size:1.35rem;margin:4px 0 2px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:.9rem}
+.layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px;min-width:0}
+.card + .card{margin-top:16px}
+#drop{border:2px dashed var(--border);border-radius:var(--radius);padding:16px;text-align:center;color:var(--muted);transition:.15s;background:var(--panel2)}
+#drop.over{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--panel2));color:var(--text);transform:scale(1.01)}
+button,.btn{font:inherit;cursor:pointer;border-radius:9px;border:1px solid var(--border);background:var(--panel2);color:var(--text);padding:8px 14px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;justify-content:center}
+.ctl{margin:12px 0}
+.ctl label{display:flex;justify-content:space-between;gap:8px;font-size:.88rem;color:var(--muted);margin-bottom:4px}
+.ctl label b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select{width:100%;font:inherit;padding:7px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.chk{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:.92rem}
+.chk input{width:18px;height:18px;accent-color:var(--accent)}
+.stage{display:flex;justify-content:center;background:var(--panel2);border-radius:10px;padding:8px;overflow:hidden}
+#out{max-width:100%;height:auto;display:block;border-radius:6px;background:#000}
+.thumbs{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+.thumbs figure{margin:0;flex:1 1 140px;min-width:0}
+.thumbs canvas{width:100%;height:auto;max-height:180px;object-fit:contain;border-radius:8px;background:var(--panel2);display:block}
+figcaption{font-size:.78rem;color:var(--muted);margin-top:4px;text-align:center}
+#status{min-height:1.4em;font-size:.88rem;color:var(--muted);margin-top:8px}
+#status.err{color:var(--danger)}#status.ok{color:var(--ok)}
+.help{font-size:.88rem;color:var(--muted);margin:10px 0 0}
+.topbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+.samples{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.samples button{padding:4px;border-radius:9px;text-align:center;font-size:.78rem;color:var(--muted);display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.samples button.on{border-color:var(--accent);color:var(--text)}
+.samples canvas{width:100%;height:auto;border-radius:6px;display:block;background:var(--panel2)}
+.card h2{font-size:.95rem;margin:0 0 4px}
+#text{width:100%;font:inherit;padding:8px 10px;border-radius:8px;background:var(--panel2);color:var(--text);border:1px solid var(--border);margin:8px 0 12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Autostereogram Maker</h1>
+  <p class="sub">Turn any image into a Magic Eye style single-image stereogram. Runs entirely in your browser.</p>
+  <div class="layout">
+    <aside>
+      <div class="card">
+        <div id="drop">
+          <div><strong>Drop an image here</strong><br>or paste with Ctrl+V</div>
+          <div class="row"><button class="primary" id="pick" type="button">Choose image...</button></div>
+          <input type="file" id="file" accept="image/*" hidden>
+        </div>
+        <div id="status" role="status" aria-live="polite"></div>
+      </div>
+      <div class="card">
+        <h2>Text</h2>
+        <input type="text" id="text" maxlength="40" placeholder="Type something..." value="HELLO" aria-label="Text to generate from">
+        <div class="ctl"><label for="tsize">Text size <b id="tsizeV"></b></label><input type="range" id="tsize" min="60" max="400" step="10" value="240"></div>
+      </div>
+      <div class="card">
+        <h2>Samples</h2>
+        <div class="samples" id="samples"></div>
+      </div>
+      <div class="card">
+        <div class="ctl"><label for="sep">Eye separation / max separation (px) <b id="sepV"></b></label><input type="range" id="sep" min="40" max="200" step="1"></div>
+        <div class="ctl"><label for="depth">Depth strength <b id="depthV"></b></label><input type="range" id="depth" min="10" max="50" step="1"></div>
+        <div class="ctl"><label for="blur">Depth smoothing (blur radius) <b id="blurV"></b></label><input type="range" id="blur" min="0" max="20" step="1"></div>
+        <div class="ctl"><label for="dot">Pattern dot size <b id="dotV"></b></label><input type="range" id="dot" min="1" max="8" step="1"></div>
+        <div class="ctl"><label for="width">Output width (px) <b id="widthV"></b></label><input type="range" id="width" min="400" max="1400" step="50"></div>
+        <div class="ctl"><label for="ptype">Pattern</label>
+          <select id="ptype">
+            <option value="bw">Random dots (black/white)</option>
+            <option value="color">Random colored dots</option>
+            <option value="tile">Repeating colored tile</option>
+          </select></div>
+        <div class="ctl"><label for="tint">Use image colors (blend) <b id="tintV"></b></label><input type="range" id="tint" min="0" max="100" step="5"></div>
+        <label class="chk"><input type="checkbox" id="invert"> Invert depth (dark = near)</label>
+        <label class="chk"><input type="checkbox" id="auto"> Auto-contrast depth map</label>
+        <label class="chk"><input type="checkbox" id="guides"> Show guide dots</label>
+        <div class="row"><button type="button" id="reset">Reset</button></div>
+      </div>
+    </aside>
+    <main>
+      <div class="card">
+        <div class="topbar">
+          <strong>Stereogram</strong>
+          <button class="primary" type="button" id="dl">Download PNG</button>
+        </div>
+        <div class="stage"><canvas id="out" width="10" height="10"></canvas></div>
+        <p class="help">How to view: relax your eyes and look "through" the image as if focusing on something far behind the screen (wall-eyed / parallel viewing), until the two guide dots merge into three and the hidden shape pops out. Keep your head level and give it a few seconds. Bright areas appear nearer by default.</p>
+        <div class="thumbs">
+          <figure><canvas id="tOrig" width="10" height="10"></canvas><figcaption>Original</figcaption></figure>
+          <figure><canvas id="tDepth" width="10" height="10"></canvas><figcaption>Depth map</figcaption></figure>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+/*CORE_START*/
+// ---------- Core algorithm (pure, no DOM) ----------
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Separable box blur, 3 passes ~ gaussian. data: Float32Array W*H, in place.
+function blurDepth(data, W, H, radius){
+  if (radius < 1) return;
+  var tmp = new Float32Array(Math.max(W, H));
+  var line = new Float32Array(Math.max(W, H));
+  var r = radius | 0, pass, x, y, i, acc, n;
+  for (pass = 0; pass < 3; pass++){
+    for (y = 0; y < H; y++){            // horizontal
+      var o = y * W;
+      acc = 0; n = 0;
+      for (i = 0; i <= r && i < W; i++){ acc += data[o + i]; n++; }
+      for (x = 0; x < W; x++){
+        tmp[x] = acc / n;
+        var add = x + r + 1, rem = x - r;
+        if (add < W){ acc += data[o + add]; n++; }
+        if (rem >= 0){ acc -= data[o + rem]; n--; }
+      }
+      for (x = 0; x < W; x++) data[o + x] = tmp[x];
+    }
+    for (x = 0; x < W; x++){            // vertical
+      acc = 0; n = 0;
+      for (i = 0; i <= r && i < H; i++){ acc += data[i * W + x]; n++; }
+      for (y = 0; y < H; y++){
+        line[y] = acc / n;
+        var add2 = y + r + 1, rem2 = y - r;
+        if (add2 < H){ acc += data[add2 * W + x]; n++; }
+        if (rem2 >= 0){ acc -= data[rem2 * W + x]; n--; }
+      }
+      for (y = 0; y < H; y++) data[y * W + x] = line[y];
+    }
+  }
+}
+
+// RGBA bytes -> depth Float32Array in [0,1], 1 = near.
+function buildDepth(rgba, W, H, o){
+  var n = W * H, d = new Float32Array(n), i, lo = 1, hi = 0;
+  for (i = 0; i < n; i++){
+    var p = i * 4, a = rgba[p + 3] / 255;
+    var l = (0.2126 * rgba[p] + 0.7152 * rgba[p + 1] + 0.0722 * rgba[p + 2]) / 255;
+    l = l * a;                         // transparent -> far (dark)
+    d[i] = l;
+  }
+  if (o.blur > 0) blurDepth(d, W, H, o.blur);
+  if (o.auto){
+    for (i = 0; i < n; i++){ if (d[i] < lo) lo = d[i]; if (d[i] > hi) hi = d[i]; }
+    var span = hi - lo;
+    if (span > 1e-4) for (i = 0; i < n; i++) d[i] = (d[i] - lo) / span;
+  }
+  if (o.invert) for (i = 0; i < n; i++) d[i] = 1 - d[i];
+  return d;
+}
+
+// Thimbleby/Inglis/Witten constraint-based SIS with hidden-surface removal.
+// depth: Float32Array W*H in [0,1] (1 = near). src: optional RGBA Uint8 W*H*4 for colour blending.
+// o: {sep, mu, dot, ptype, tint (0..1), seed, guides}
+// Returns Uint32Array W*H (ABGR little-endian).
+function makeStereogram(depth, W, H, o, src){
+  var out = new Uint32Array(W * H);
+  var same = new Int32Array(W), root = new Int32Array(W);
+  var E = o.sep, mu = o.mu, dot = Math.max(1, o.dot | 0);
+  var tintA = Math.round((o.tint || 0) * 256);
+  var patRow = new Uint32Array(W), cachedBlock = -1;
+  var rng, tile = null, P = Math.max(8, Math.round(E));
+  var colored = o.ptype === 'color' || o.ptype === 'tile';
+  var x, y, t;
+
+  function rnd(r){
+    if (!colored) return r() < 0.5 ? 0xFF000000 : 0xFFFFFFFF;
+    var R = 40 + (r() * 215 | 0), G = 40 + (r() * 215 | 0), B = 40 + (r() * 215 | 0);
+    return (0xFF000000 | (B << 16) | (G << 8) | R) >>> 0;
+  }
+  if (o.ptype === 'tile'){
+    var tr = mulberry32((o.seed | 0) + 99), cells = Math.ceil(P / dot);
+    var cellv = new Uint32Array(cells * cells);
+    for (var c = 0; c < cellv.length; c++) cellv[c] = rnd(tr);
+    tile = new Uint32Array(P * P);
+    for (var ty = 0; ty < P; ty++) for (var tx = 0; tx < P; tx++)
+      tile[ty * P + tx] = cellv[((ty / dot) | 0) * cells + ((tx / dot) | 0)];
+  }
+
+  // pixel separation for depth z: s = round((1 - mu*z) * E / (2 - mu*z))
+  for (y = 0; y < H; y++){
+    var row = y * W;
+    for (x = 0; x < W; x++) same[x] = x;
+
+    for (x = 0; x < W; x++){
+      var z = depth[row + x];
+      var sep = Math.round((1 - mu * z) * E / (2 - mu * z));
+      var left = x - ((sep + (sep & 1)) >> 1);
+      var right = left + sep;
+      if (left < 0 || right >= W) continue;
+      // hidden-surface removal
+      var visible = true, zt;
+      t = 1;
+      do {
+        zt = z + 2 * (2 - mu * z) * t / (mu * E);
+        if (x - t < 0 || x + t >= W) break;
+        visible = depth[row + x - t] < zt && depth[row + x + t] < zt;
+        t++;
+      } while (visible && zt < 1);
+      if (visible){
+        // union with ordering
+        for (var l = same[left]; l !== left && l !== right; l = same[left]){
+          if (l < right) left = l;
+          else { left = right; right = l; }
+        }
+        same[left] = right;
+      }
+    }
+
+    // pattern row for tile-less types: random per dot cell, rows share a block of `dot` rows
+    if (tile === null){
+      var blk = (y / dot) | 0;
+      if (blk !== cachedBlock){
+        cachedBlock = blk;
+        rng = mulberry32((o.seed | 0) * 7919 + blk * 104729 + 1);
+        var cx = 0;
+        while (cx < W){
+          var v = rnd(rng), end = Math.min(W, cx + dot);
+          for (; cx < end; cx++) patRow[cx] = v;
+        }
+      }
+    }
+
+    // colour fill, right to left so each pixel inherits from its (larger-x) partner
+    for (x = W - 1; x >= 0; x--){
+      var r0 = same[x] === x ? x : root[same[x]];
+      root[x] = r0;
+      var pc = tile === null ? patRow[r0] : tile[(y % P) * P + (r0 % P)];
+      if (tintA > 0 && src){
+        var sp = (row + r0) * 4;
+        var pr = pc & 255, pg = (pc >>> 8) & 255, pb = (pc >>> 16) & 255;
+        var ia = 256 - tintA;
+        pr = (pr * ia + src[sp] * tintA) >> 8;
+        pg = (pg * ia + src[sp + 1] * tintA) >> 8;
+        pb = (pb * ia + src[sp + 2] * tintA) >> 8;
+        pc = (0xFF000000 | (pb << 16) | (pg << 8) | pr) >>> 0;
+      }
+      out[row + x] = pc;
+    }
+  }
+
+  if (o.guides){
+    var gy = Math.max(6, Math.round(H * 0.03)), rad = Math.max(3, Math.round(W / 300));
+    var gx1 = Math.round(W / 2 - E / 2), gx2 = gx1 + E;
+    [gx1, gx2].forEach(function(gx){
+      for (var yy = -rad; yy <= rad; yy++) for (var xx = -rad; xx <= rad; xx++){
+        if (xx * xx + yy * yy > rad * rad) continue;
+        var px = gx + xx, py = gy + yy;
+        if (px >= 0 && px < W && py >= 0 && py < H) out[py * W + px] = 0xFF000000;
+      }
+    });
+  }
+  return out;
+}
+/*CORE_END*/
+
+// ---------- UI ----------
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var DEFAULTS = {sep:90, depth:33, blur:4, dot:2, width:1000, ptype:'bw', tint:0, invert:false, auto:true, guides:true};
+  var ids = ['sep','depth','blur','dot','width','ptype','tint','invert','auto','guides'];
+  var fmt = {
+    sep:function(v){return v+' px';}, depth:function(v){return (v/100).toFixed(2);}, blur:function(v){return v+' px';},
+    dot:function(v){return v+' px';}, width:function(v){return v+' px';}, tint:function(v){return v+'%';}
+  };
+  var srcCanvas = document.createElement('canvas'); // downscaled source (<= 1400 px)
+  var out = $('out'), status = $('status'), timer = null, seed = 12345, busy = false, pending = false;
+
+  function setStatus(msg, cls){ status.textContent = msg || ''; status.className = cls || ''; }
+
+  function readSettings(){
+    var s = {};
+    ids.forEach(function(id){
+      var el = $(id);
+      s[id] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : +el.value);
+    });
+    return s;
+  }
+  function applySettings(s){
+    ids.forEach(function(id){
+      var el = $(id);
+      if (el.type === 'checkbox') el.checked = s[id]; else el.value = s[id];
+    });
+    updateLabels();
+  }
+  function updateLabels(){
+    Object.keys(fmt).forEach(function(k){ $(k + 'V').textContent = fmt[k](+$(k).value); });
+  }
+
+  function schedule(){ updateLabels(); clearTimeout(timer); timer = setTimeout(generate, 150); }
+
+  function generate(){
+    if (busy){ pending = true; return; }
+    busy = true; pending = false;
+    setStatus('Generating...');
+    setTimeout(function(){
+      try {
+        var s = readSettings();
+        var W = Math.round(s.width), H = Math.max(1, Math.round(W * srcCanvas.height / srcCanvas.width));
+        var wc = document.createElement('canvas'); wc.width = W; wc.height = H;
+        var wx = wc.getContext('2d', {willReadFrequently:true});
+        wx.imageSmoothingQuality = 'high';
+        wx.fillStyle = '#000'; wx.fillRect(0, 0, W, H);
+        wx.drawImage(srcCanvas, 0, 0, W, H);
+        var img = wx.getImageData(0, 0, W, H);
+        var t0 = performance.now();
+        var depth = buildDepth(img.data, W, H, {blur:s.blur, auto:s.auto, invert:s.invert});
+        var px = makeStereogram(depth, W, H, {
+          sep:s.sep, mu:s.depth / 100, dot:s.dot, ptype:s.ptype, tint:s.tint / 100, seed:seed, guides:s.guides
+        }, img.data);
+        out.width = W; out.height = H;
+        var octx = out.getContext('2d');
+        var od = octx.createImageData(W, H);
+        new Uint32Array(od.data.buffer).set(px);
+        octx.putImageData(od, 0, 0);
+        drawThumbs(depth, W, H);
+        setStatus('Done in ' + Math.round(performance.now() - t0) + ' ms (' + W + ' x ' + H + ').', 'ok');
+      } catch (e) {
+        console.error(e);
+        setStatus('Could not generate the stereogram: ' + (e && e.message ? e.message : e), 'err');
+      }
+      busy = false;
+      if (pending) generate();
+    }, 0);
+  }
+
+  function drawThumbs(depth, W, H){
+    var o = $('tOrig'), d = $('tDepth'), tw = 320, th = Math.max(1, Math.round(tw * H / W));
+    o.width = d.width = tw; o.height = d.height = th;
+    o.getContext('2d').drawImage(srcCanvas, 0, 0, tw, th);
+    var dc = document.createElement('canvas'); dc.width = W; dc.height = H;
+    var dctx = dc.getContext('2d'), id = dctx.createImageData(W, H), u = new Uint32Array(id.data.buffer);
+    for (var i = 0; i < depth.length; i++){ var g = Math.max(0, Math.min(255, depth[i] * 255 | 0)); u[i] = 0xFF000000 | (g << 16) | (g << 8) | g; }
+    dctx.putImageData(id, 0, 0);
+    d.getContext('2d').drawImage(dc, 0, 0, tw, th);
+  }
+
+  function setSource(img, w, h){
+    var max = 1400, sc = Math.min(1, max / Math.max(w, h));
+    var cw = Math.max(1, Math.round(w * sc)), ch = Math.max(1, Math.round(h * sc));
+    srcCanvas.width = cw; srcCanvas.height = ch;
+    var c = srcCanvas.getContext('2d');
+    c.imageSmoothingQuality = 'high';
+    c.clearRect(0, 0, cw, ch);
+    c.drawImage(img, 0, 0, cw, ch);
+    seed = (Math.random() * 1e9) | 0;
+    generate();
+  }
+
+  function loadFile(file){
+    try {
+      if (!file) return;
+      if (!/^image\//.test(file.type)){ setStatus('That file is not an image (' + (file.type || 'unknown type') + '). Please choose a PNG, JPEG, GIF, WebP or BMP.', 'err'); return; }
+      setStatus('Loading image...');
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function(){
+        try { setSource(img, img.naturalWidth, img.naturalHeight); }
+        catch (e) { setStatus('Could not process the image: ' + e.message, 'err'); }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); setStatus('The file could not be decoded as an image.', 'err'); };
+      img.src = url;
+    } catch (e) { setStatus('Could not read the file: ' + e.message, 'err'); }
+  }
+
+  // ---------- built-in samples (drawn procedurally, nothing external) ----------
+  var SW = 900, SH = 600;
+  function fieldCanvas(fn){ // fn(x, y) -> 0..255 gray
+    var c = document.createElement('canvas'); c.width = SW; c.height = SH;
+    var x = c.getContext('2d'), id = x.createImageData(SW, SH), d = id.data;
+    for (var y = 0; y < SH; y++) for (var i = 0; i < SW; i++){
+      var v = Math.max(0, Math.min(255, fn(i, y))), p = (y * SW + i) * 4;
+      d[p] = d[p + 1] = d[p + 2] = v; d[p + 3] = 255;
+    }
+    x.putImageData(id, 0, 0);
+    return c;
+  }
+  function bgFill(x){ x.fillStyle = '#202020'; x.fillRect(0, 0, SW, SH); }
+  var SAMPLES = [
+    { name: 'Sphere', draw: function(x){
+      bgFill(x);
+      var g = x.createRadialGradient(430, 270, 10, 450, 300, 230);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#404040');
+      x.fillStyle = g; x.beginPath(); x.arc(450, 300, 230, 0, 7); x.fill();
+    } },
+    { name: 'Torus', draw: function(x){
+      bgFill(x);
+      var g = x.createLinearGradient(150, 100, 750, 500);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#303030');
+      x.strokeStyle = g; x.lineWidth = 130; x.beginPath(); x.ellipse(450, 300, 260, 190, 0, 0, 7); x.stroke();
+    } },
+    { name: 'Heart', draw: function(x){
+      bgFill(x);
+      var g = x.createRadialGradient(400, 230, 20, 450, 300, 300);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#505050');
+      x.fillStyle = g; x.beginPath(); x.moveTo(450, 480);
+      x.bezierCurveTo(120, 300, 170, 90, 450, 230);
+      x.bezierCurveTo(730, 90, 780, 300, 450, 480); x.fill();
+    } },
+    { name: 'Star', draw: function(x){
+      bgFill(x);
+      var g = x.createRadialGradient(450, 300, 20, 450, 300, 280);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#505050');
+      x.fillStyle = g; x.beginPath();
+      for (var i = 0; i < 10; i++){
+        var r = i % 2 ? 120 : 290, a = -Math.PI / 2 + i * Math.PI / 5;
+        x.lineTo(450 + r * Math.cos(a), 310 + r * Math.sin(a));
+      }
+      x.closePath(); x.fill();
+    } },
+    { name: 'Stairs', draw: function(x){
+      bgFill(x);
+      for (var i = 0; i < 6; i++){
+        var v = Math.round(90 + i * 30), top = 480 - i * 60;
+        x.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')';
+        x.fillRect(120 + i * 110, top, 110, 600 - top);
+      }
+    } },
+    { name: 'Pyramid', draw: function(x){
+      bgFill(x);
+      function face(pts, v){ x.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; x.beginPath(); x.moveTo(pts[0], pts[1]); for (var i = 2; i < pts.length; i += 2) x.lineTo(pts[i], pts[i + 1]); x.closePath(); x.fill(); }
+      face([450, 110, 150, 480, 450, 480], 255);
+      face([450, 110, 450, 480, 750, 480], 130);
+      face([150, 480, 450, 480, 450, 540, 150, 540], 60);
+    } },
+    { name: 'Waves', draw: null, field: function(x, y){
+      return 128 + 90 * Math.sin(x / 55) * Math.cos(y / 70) + 30 * Math.sin((x + y) / 25);
+    } },
+    { name: 'Bowl', draw: null, field: function(x, y){
+      var dx = (x - 450) / 380, dy = (y - 300) / 230, r2 = dx * dx + dy * dy;
+      return r2 < 1 ? 255 * Math.sqrt(1 - r2) : 30;
+    } },
+    { name: 'Text', draw: function(x){
+      bgFill(x);
+      x.fillStyle = '#f0f0f0'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'bold 340px Arial Black, Arial, sans-serif';
+      x.fillText('3D', 450, 310);
+    } },
+    { name: 'Mountains', draw: null, field: function(x, y){
+      var h = 0.5 + 0.25 * Math.sin(x / 90) + 0.15 * Math.sin(x / 37 + 1.3) + 0.08 * Math.sin(x / 13);
+      var top = 600 * (1 - h);
+      return y > top ? 40 + 215 * (y - top) / Math.max(1, 600 - top) : 20;
+    } }
+  ];
+  SAMPLES.forEach(function(s){
+    if (s.field){ var f = s.field; s.canvas = fieldCanvas(f); }
+    else { s.canvas = document.createElement('canvas'); s.canvas.width = SW; s.canvas.height = SH; s.draw(s.canvas.getContext('2d')); }
+  });
+  function loadSample(i){
+    var s = SAMPLES[i];
+    Array.prototype.forEach.call($('samples').children, function(b, j){ b.classList.toggle('on', i === j); });
+    setSource(s.canvas, SW, SH);
+  }
+  function buildSamples(){
+    var box = $('samples');
+    SAMPLES.forEach(function(s, i){
+      var b = document.createElement('button');
+      b.type = 'button'; b.title = s.name;
+      var t = document.createElement('canvas'); t.width = 160; t.height = 107;
+      t.getContext('2d').drawImage(s.canvas, 0, 0, 160, 107);
+      b.appendChild(t);
+      b.appendChild(document.createTextNode(s.name));
+      b.addEventListener('click', function(){ loadSample(i); });
+      box.appendChild(b);
+    });
+  }
+
+  // Text input: draws the typed text as a stereogram source, shrinking it to fit the width
+  var textTimer = null;
+  function renderText(){
+    var size = +$('tsize').value, txt = $('text').value.trim() || ' ';
+    $('tsizeV').textContent = size + ' px';
+    var c = document.createElement('canvas'); c.width = SW; c.height = SH;
+    var x = c.getContext('2d'), font = 'bold ' + size + 'px Arial Black, Arial, sans-serif';
+    bgFill(x);
+    x.font = font;
+    var w = x.measureText(txt).width, maxW = 840;
+    if (w > maxW){ size = size * maxW / w; x.font = 'bold ' + size + 'px Arial Black, Arial, sans-serif'; }
+    x.fillStyle = '#f0f0f0'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(txt, SW / 2, SH / 2 + 10);
+    Array.prototype.forEach.call($('samples').children, function(b){ b.classList.remove('on'); });
+    setSource(c, SW, SH);
+  }
+  function scheduleText(delay){ clearTimeout(textTimer); textTimer = setTimeout(renderText, delay); }
+
+  // ---------- events ----------
+  ids.forEach(function(id){ $(id).addEventListener('input', schedule); $(id).addEventListener('change', schedule); });
+  $('reset').addEventListener('click', function(){ applySettings(DEFAULTS); schedule(); });
+  $('pick').addEventListener('click', function(){ $('file').click(); });
+  $('file').addEventListener('change', function(){ loadFile(this.files && this.files[0]); this.value = ''; });
+  $('dl').addEventListener('click', function(){
+    try {
+      out.toBlob(function(b){
+        if (!b){ setStatus('Could not create PNG.', 'err'); return; }
+        var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'stereogram.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+      }, 'image/png');
+    } catch (e) { setStatus('Download failed: ' + e.message, 'err'); }
+  });
+
+  var drop = $('drop'), depthCount = 0;
+  window.addEventListener('dragenter', function(e){ e.preventDefault(); depthCount++; drop.classList.add('over'); });
+  window.addEventListener('dragover', function(e){ e.preventDefault(); });
+  window.addEventListener('dragleave', function(e){ e.preventDefault(); if (--depthCount <= 0){ depthCount = 0; drop.classList.remove('over'); } });
+  window.addEventListener('drop', function(e){
+    e.preventDefault(); depthCount = 0; drop.classList.remove('over');
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadFile(f); else setStatus('Nothing droppable found. Drop an image file.', 'err');
+  });
+  window.addEventListener('paste', function(e){
+    try {
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      for (var i = 0; i < items.length; i++){
+        if (items[i].type.indexOf('image/') === 0){ loadFile(items[i].getAsFile()); e.preventDefault(); return; }
+      }
+      setStatus('No image found on the clipboard.', 'err');
+    } catch (err) { setStatus('Paste failed: ' + err.message, 'err'); }
+  });
+
+  $('text').addEventListener('input', function(){ scheduleText(250); });
+  $('tsize').addEventListener('input', function(){ scheduleText(150); });
+
+  applySettings(DEFAULTS);
+  buildSamples();
+  renderText();
+})();
+</script>
+</body>
+</html>
